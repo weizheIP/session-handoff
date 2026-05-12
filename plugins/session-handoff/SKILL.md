@@ -1,7 +1,7 @@
 ---
 name: session-handoff
 description: "End-of-session handoff that captures session knowledge, dispatches output across the canonical 7-bucket docs/ taxonomy (decisions/runbooks/analysis/references/reviews/handoffs/deliverables — aligned with memory-hygiene v3.1), triggers a doc-freshness reverse-lint to catch stale normative guidance, updates memory, and prepares next-session prompts. Use when: (1) user says 'wrap up', 'hand over', 'create handoff', 'end of session', 'write handoff', 'session handoff'; (2) non-trivial work session (3+ tasks) is ending; (3) context window is approaching limits; (4) user says 'consolidate', 'what's the current state', 'start here document' after parallel sessions; (5) the session produced artifacts that belong in more than one docs/ bucket (ADR + analysis + runbook + review). Includes cross-session consolidation when 3+ handoffs accumulate and a mandatory reverse-lint verify step against any lessons.md / feedback_*.md touched this session."
-version: 1.4.0
+version: 1.7.0
 triggers:
   - "wrap up"
   - "session handoff"
@@ -15,7 +15,7 @@ triggers:
   - "start here document"
 ---
 
-# Session Handoff v1.4 — Bucket-aware + reverse-lint
+# Session Handoff v1.6 — Bucket-aware + reverse-lint + auto-merge docs PRs
 
 Comprehensive end-of-session knowledge capture with built-in cross-session
 consolidation. Ensures nothing is lost between sessions and produces a single
@@ -69,6 +69,49 @@ If a session artifact doesn't fit any bucket, surface it to the user — don't i
 - **Handoff docs use different naming:** Scan for `session*handoff*` and `*_handoff.md` patterns.
 
 ## The Checklist (execute in order)
+
+### Phase 0: Label audit (loose mode, blocking-with-escape-hatch)
+
+Before emitting any handoff doc that contains code → human-label tables (e.g.
+`AD — Accepted Fully` Salesforce status codes, HTTP-status legends, enum
+descriptions), run the label audit. This is the **author-side gate** that
+prevents the "predecessor handoff fabricates semantic labels" failure mode
+(see `~/.claude/lessons.md` L-S109b-1 and `axioms.md` § Authoritative Labels).
+
+**Run after Phase 1 Step 2 (handoff doc draft) and before any other phase.**
+
+```bash
+python3 ~/.claude/skills/session-handoff/scripts/label_audit.py \
+  docs/handoffs/session_N_handoff.md
+```
+
+**Behavior:**
+
+- **Exit 0 (clean)** — no code-legend rows detected, OR every flagged row
+  carries an inline tag. Continue.
+- **Exit 1 (blocking — untagged rows)** — print the offending rows, then
+  fix one of these ways before continuing:
+  - Add `[verified: <repo-relative-path>:<line>]` after the description for
+    every row whose label has been confirmed against an authoritative source
+    (vendor doc, INFORMATION_SCHEMA, internal data dictionary derived from
+    real probes). Cite the file + line that contains the verification.
+  - Add `[HYPOTHESIS]` after the description for any row whose label is a
+    guess, so the receiving session knows to re-probe.
+  - If the table is a retrospective reference (e.g., quoting an old
+    fabricated table to explain why the new system exists) and re-tagging is
+    onerous, set frontmatter `label-audit-skipped: <reason>` to bypass.
+- **Exit 2 (skipped via frontmatter)** — print the skip reason; the
+  receiving session sees it and knows to treat ALL labels in this doc as
+  unverified.
+
+**The escape hatch is a load-bearing feature**, not a workaround. False
+positives (e.g., a git-commit-hash table with 3-letter codes) cost 30s of
+human ack to bypass; false negatives cost a fabricated label shipping to a
+client. The asymmetry is by design.
+
+**Run the same scanner against any next-session prompts you write in
+Phase 3** (`session_N+1_prompt.md`, parallel prompts) — the receiving
+session is downstream of these too.
 
 ### Phase 1: Capture (what happened)
 
@@ -203,11 +246,29 @@ bucket output rather than duplicating its content.
     - PR body should include: summary bullets, test plan checklist, line/file counts
     - If the session had no code changes (docs-only), use `docs(sN):` prefix instead of `feat(sN):`
 
-22. **Merge PR** (if appropriate):
-    - If the user asks to merge: `gh pr merge <number> --squash`
-    - If the user doesn't ask: note in the summary table that the PR is open and ready for review
-    - After merge: `git checkout main && git pull` to sync local main
-    - Update the next-session prompt to note the PR is merged (remove "merge PR #N" from prerequisites)
+22. **Review + auto-merge for docs-only handoff PRs.** When the PR is purely docs from this skill (handoff doc + next-prompt + maybe a sessions_archive/MEMORY.md edit, no code/tests/deploy), default to: review-with-agent → fix findings → squash-merge. Don't wait for the user to ask. The handoff PR has narrow scope and stalls the loop if it sits open between sessions.
+
+    a. **Launch a review agent** scoped lighter than code review:
+       - **Factual accuracy** — cited PR numbers, commit SHAs, issue numbers, tracker IDs all resolve (`gh pr view`, `gh issue view`, `git log <sha> -1`)
+       - **Dead-reference check** — every file path / line number / handoff filename mentioned must resolve in current main, OR be explicitly annotated as living on a non-main branch with a `git show <branch>:<path>` recipe. Common trap: predecessor handoff files written on a wip branch that never merged
+       - **Internal consistency** — handoff and next-prompt agree on session number, predecessor refs, branch names, what's done vs deferred
+       - **Self-contained next-prompt** — receiver can cold-start; no "see above" or unresolved references
+       - **Naming convention** — if `b`/`c` suffix used for parallel-session collision, confirm precedent matches and self-references use the suffixed filename
+
+       Use `voltagent-qa-sec:code-reviewer` (or equivalent code-review agent). Request a <250-word report. Surface only HIGH/MEDIUM findings.
+
+    b. **Address findings** via Edit tool. Common patterns:
+       - Predecessor refs to files on a wip branch → annotate with `git show <branch>:<path>` recipe (don't delete the reference; the receiver may want to read it)
+       - Self-reference bugs (`session_NNN_handoff.md (this)` where the actual filename includes a `b`/`c` suffix)
+       - `module.py:NNN` line numbers drift fast — verify against current main or drop the line number
+
+    c. **Refresh the PR body** if findings meaningfully changed the story (note the review-agent pass + what was fixed).
+
+    d. **Squash-merge**: `gh pr merge <N> --squash --delete-branch`. If `--delete-branch` fails with "main is already used by worktree at..." (common when running from a worktree that has main checked out elsewhere), the merge still succeeded — clean up the remote ref via `gh api -X DELETE repos/<owner>/<repo>/git/refs/heads/<branch>`.
+
+    e. **Sync local main** if possible (`git checkout main && git pull`). Skip silently if the current worktree can't switch (branch checked out elsewhere). Note merge in the final summary table.
+
+    **For non-docs-only PRs** (any code/tests/deploy mixed in): default to leaving the PR open for human review. Only merge if user explicitly asks. Project memory may add a "always run code-reviewer pass before merging PRs" rule — apply that for code PRs.
 
 23. **Quick memory hygiene check:**
     - Any new memory files missing from MEMORY.md?
@@ -287,6 +348,84 @@ sessions into a single authoritative plan.
     - Is the PR status current? (`gh pr view N --json state`)
     - Are branch references still valid? (`git branch -a`)
     - Have any deferred items been completed without updating the plan?
+
+### Phase 6: User-facing live-dashboard recap (chat output)
+
+After Phases 0-5 produce the persisted artefacts (handoff doc + buckets + PR),
+deliver a **separate, user-facing recap in chat** that translates the
+shipped work into what the user will actually *see* the next time they open
+the product. This is conversational output, not a file — it's what the user
+reads before they close the session.
+
+Why this matters: handoff docs are written for *Claude in a future session*
+(dense, technical, complete). The user reading the chat needs a different
+register — what changed, where they'll notice it, anything they should
+verify themselves. Without this step, the user has to read the handoff doc
+or click through 4-8 PRs to know what changed in their product.
+
+31. **Structure the recap as "shipped change → user-visible effect"**, one
+    section per merged PR or material change. Skip purely internal work
+    (tracker entries, repo hygiene, doc-only PRs) — those don't surface to
+    the user.
+
+    For each change, write 2-4 lines covering:
+    - **Where to look** (which page / route / drawer / report)
+    - **Before vs. after**, framed in what the user actually perceived (not
+      class names, not SQL — what they SAW)
+    - Optional: any caveat (e.g. "no visible change but cleaner codebase")
+
+32. **Group by venue, not by PR**, when multiple PRs land on the same page.
+    If three PRs all changed `/drivers`, write one `/drivers` recap section
+    summarising the net visible delta — not three sequential sections that
+    force the user to mentally compose.
+
+33. **Mention the baker / pipeline run if you ran one.** "Baked payload
+    refreshed on `<job-name>` — the new labels are live now, not waiting
+    for the nightly bake." This closes the loop on "did the change
+    actually reach my eyes" — without it, the user wonders whether they're
+    looking at fresh data.
+
+34. **Flag pre-existing failures as pre-existing.** If a test failed both
+    before and after your work, say so explicitly in the recap. Otherwise
+    the user assumes you introduced it.
+
+35. **Skip the recap when the work is purely internal.** If the session was
+    e.g. memory-hygiene + skill edits + tracker reconciliation with zero
+    product-visible changes, just say so in one line: "Session was
+    internal-only — no live-dashboard impact." Don't manufacture user-
+    facing prose for backend hygiene.
+
+**Template** (use as scaffolding; collapse sections that don't apply):
+
+```markdown
+## 🌐 What you'll see in the live dashboard
+
+### <Venue 1, e.g. `/drivers` chevron — `Days Since FAFSA` row>
+- **Before:** <what the user used to see>
+- **After:** <what the user sees now>
+- <optional caveat>
+
+### <Venue 2 — group multiple related PRs on the same page together>
+...
+
+### Baker / pipeline run *(only if you ran one)*
+<job name> succeeded — <what's now live without waiting>.
+
+### Notes
+- <pre-existing failures you verified weren't introduced>
+- <anything the user should sanity-check themselves>
+```
+
+**Anti-patterns for the recap:**
+
+- ❌ Listing PR numbers + commit SHAs as the structure (that's the handoff doc's job)
+- ❌ Quoting class names, function names, or SQL — user doesn't care
+- ❌ "We shipped 4 PRs" with no per-PR what-they'll-see — useless
+- ❌ Skipping the baker / pipeline run note when one was triggered
+- ❌ Manufacturing user-visible prose for internal-only sessions
+
+**Good signal:** the recap reads like release notes for someone who didn't
+follow the session — not like a status update for someone who did.
 
 ## Output format
 

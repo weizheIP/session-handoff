@@ -1,6 +1,6 @@
 {
   "name": "session-handoff",
-  "version": "1.4.0",
+  "version": "1.7.0",
   "private": true,
   "description": "End-of-session handoff with bucket-aware dispatch across the canonical 7-bucket docs/ taxonomy (aligned with memory-hygiene v3.1) and doc-freshness reverse-lint. Captures knowledge, routes artifacts across decisions/runbooks/analysis/references/reviews/handoffs/deliverables, updates memory, prepares next-session prompts, and catches stale normative guidance.",
   "scripts": {
