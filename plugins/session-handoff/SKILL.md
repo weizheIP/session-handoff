@@ -1,7 +1,7 @@
 ---
 name: session-handoff
-description: "End-of-session handoff that captures session knowledge, dispatches output across the canonical 7-bucket docs/ taxonomy (decisions/runbooks/analysis/references/reviews/handoffs/deliverables — aligned with memory-hygiene v3.1), triggers a doc-freshness reverse-lint to catch stale normative guidance, updates memory, and prepares next-session prompts. Use when: (1) user says 'wrap up', 'hand over', 'create handoff', 'end of session', 'write handoff', 'session handoff'; (2) non-trivial work session (3+ tasks) is ending; (3) context window is approaching limits; (4) user says 'consolidate', 'what's the current state', 'start here document' after parallel sessions; (5) the session produced artifacts that belong in more than one docs/ bucket (ADR + analysis + runbook + review). Includes cross-session consolidation when 3+ handoffs accumulate and a mandatory reverse-lint verify step against any lessons.md / feedback_*.md touched this session."
-version: 1.7.0
+description: "End-of-session handoff that captures session knowledge, dispatches output across the canonical 7-bucket docs/ taxonomy (decisions/runbooks/analysis/references/reviews/handoffs/deliverables — aligned with memory-hygiene v3.3), triggers a doc-freshness reverse-lint + skill-freshness audit to catch stale normative guidance, emits the future-to-do plan's follow-up items as GitHub issues, updates memory, and prepares next-session prompts. Use when: (1) user says 'wrap up', 'hand over', 'create handoff', 'end of session', 'write handoff', 'session handoff'; (2) non-trivial work session (3+ tasks) is ending; (3) context window is approaching limits; (4) user says 'consolidate', 'what's the current state', 'start here document' after parallel sessions; (5) the session produced artifacts that belong in more than one docs/ bucket (ADR + analysis + runbook + review). Includes cross-session consolidation when 3+ handoffs accumulate and a mandatory reverse-lint verify step against any lessons.md / feedback_*.md touched this session."
+version: 1.9.0
 triggers:
   - "wrap up"
   - "session handoff"
@@ -21,12 +21,12 @@ Comprehensive end-of-session knowledge capture with built-in cross-session
 consolidation. Ensures nothing is lost between sessions and produces a single
 source of truth when multiple handoffs accumulate.
 
-**v1.4 alignment with memory-hygiene v3.1**: session output is dispatched across
+**v1.4 alignment with memory-hygiene v3.3**: session output is dispatched across
 the canonical **7-bucket docs/ taxonomy** — not just `docs/handoffs/`. At the end of
 the workflow, invokes `doc-freshness-reverse-lint` against any memory files touched
 this session to surface stale normative guidance in project docs.
 
-Counterpart skill: **memory-hygiene v3.1** cleans Claude's persistent memory +
+Counterpart skill: **memory-hygiene v3.3** cleans Claude's persistent memory +
 audits project `docs/` against the same taxonomy. Run memory-hygiene after
 10+ sessions or when `docs/` has drifted.
 
@@ -38,7 +38,7 @@ audits project `docs/` against the same taxonomy. Run memory-hygiene after
 - After parallel sessions complete and you need one "start here" document
 - User says "consolidate", "what's the current state"
 
-## Canonical 7-bucket docs/ taxonomy (from memory-hygiene v3.1)
+## Canonical 7-bucket docs/ taxonomy (from memory-hygiene v3.3)
 
 Session output is **dispatched** to the right bucket — not dumped into one handoff file.
 A typical rich session produces artifacts in 3-5 of these 7 buckets simultaneously.
@@ -193,6 +193,62 @@ bucket output rather than duplicating its content.
     - Update lesson count
     - Add session reference
 
+#### Emitting follow-up items as GitHub issues
+
+This is the issue-filing half of step 13. The future-to-do plan's whole job is
+preserving context across sessions — but a follow-up that lives only as plan
+prose decays into a stale TODO, because the next session has no actionable
+breadcrumb. Filing each follow-up as a GitHub issue closes that loop.
+
+**Which items to emit:** the *new* follow-up items this session discovered and is
+*not* completing now — whatever the plan calls them (`Next steps`, `Follow-ups`,
+`Deferred`, `Open questions`). Skip items already marked DONE and items already
+tracked by an existing issue.
+
+**Default behavior — dry-run preview.** Do NOT file issues silently. For each
+follow-up item, draft a `gh issue create` payload and show the user the full
+command(s) for inspection first:
+
+```bash
+gh issue create \
+  --repo <owner>/<name> \
+  --title "<concise follow-up title>" \
+  --body "<why this matters + origin session/PR + file pointers>" \
+  --label "follow-up"        # optional — only if the label already exists in the repo
+```
+
+Present all drafted commands as one batch, then let the user approve, edit, or
+skip individual items. Run the approved `gh issue create` commands only after the
+user confirms. (If the user has explicitly asked for autonomous operation, you
+may file directly — but the dry-run preview is the default.)
+
+**Target repo resolution:**
+- If the user named a repo, use it (`--repo owner/name`).
+- Otherwise auto-detect from the current git remote:
+  `gh repo view --json nameWithOwner -q .nameWithOwner` (falls back to parsing
+  `git remote get-url origin`).
+- If neither resolves, skip issue emission — leave the items as plan text and
+  note "issue emission skipped: no target repo" in the handoff doc.
+
+**De-duplicate before filing.** For each drafted title, search the target repo's
+open issues so re-running the handoff on the same plan doesn't double-file:
+
+```bash
+gh issue list --repo <owner>/<name> --state open --search "<title keywords>" \
+  --json number,title
+```
+
+If a clear title match exists, drop that item from the batch and reference the
+existing issue number in the plan instead of filing a duplicate.
+
+**After filing:** annotate the corresponding plan item with its issue number
+(e.g. `- [ ] Track 2 engagement-width follow-up — #201`) so the plan and the
+issue tracker stay linked.
+
+**Graceful degradation:** if `gh` is not installed or not authenticated, skip
+issue emission, keep the follow-up items as plan text, and note "issue emission
+skipped: gh unavailable" in the handoff doc — never block the handoff on it.
+
 ### Phase 3: Prepare (next session)
 
 17. **Write next session prompt** -> `docs/handoffs/session_N+1_prompt.md`
@@ -294,6 +350,19 @@ bucket output rather than duplicating its content.
       `file:line` references and the triggering rule. **Never auto-edit** the flagged docs; the
       human decides what to update.
     - If `reverse_lint.py` is unavailable, log "doc-freshness-reverse-lint: not installed" and continue.
+
+24b. **Skill freshness audit** (per axiom #21) — if any `SKILL.md` was edited this session, run the freshness check:
+
+    ```bash
+    # Only if a SKILL.md was touched this session
+    if git diff --name-only HEAD~N..HEAD | grep -q 'skills/.*/SKILL\.md$'; then
+      python3 ~/.claude/skills/doc-freshness-reverse-lint/scripts/skill_freshness_audit.py --human
+    fi
+    ```
+
+    Flags any skill whose `last_verified` has aged past `staleness_window_days` (default 90), or that opts into the freshness contract without declaring one. **Never auto-bump** `last_verified` — surface candidates for human verification and add them to the "Stale docs to review" section of the handoff doc.
+
+    Skip silently if no SKILL.md was touched. If the audit script is unavailable, log "skill_freshness_audit: not installed" and continue.
 
 25. **Final confirmation** to user: list all artifacts produced, grouped by bucket
 

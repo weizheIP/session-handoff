@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "wan-huiyan-session-handoff",
-  "description": "Single-plugin marketplace for session-handoff — End-of-session handoff with bucket-aware dispatch across the canonical 7-bucket docs/ taxonomy (aligned with memory-hygiene v3.1) and doc-freshness reverse-lint.",
+  "description": "Single-plugin marketplace for session-handoff — End-of-session handoff with bucket-aware dispatch across the canonical 7-bucket docs/ taxonomy (aligned with memory-hygiene v3.3) and doc-freshness reverse-lint.",
   "owner": {
     "name": "wan-huiyan"
   },
@@ -9,8 +9,8 @@
     {
       "name": "session-handoff",
       "source": "./plugins/session-handoff",
-      "description": "End-of-session handoff with bucket-aware dispatch across the canonical 7-bucket docs/ taxonomy (aligned with memory-hygiene v3.1) and doc-freshness reverse-lint. Captures knowledge, routes artifacts to decisions/runbooks/analysis/references/reviews/handoffs/deliverables, updates memory, prepares next-session prompts, and catches stale normative guidance.",
-      "version": "1.7.0"
+      "description": "End-of-session handoff with bucket-aware dispatch across the canonical 7-bucket docs/ taxonomy (aligned with memory-hygiene v3.3), doc-freshness reverse-lint + skill-freshness audit, and future-to-do emission as GitHub issues. Captures knowledge, routes artifacts to decisions/runbooks/analysis/references/reviews/handoffs/deliverables, updates memory, prepares next-session prompts, and catches stale normative guidance.",
+      "version": "1.9.0"
     }
   ]
 }
