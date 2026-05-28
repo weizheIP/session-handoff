@@ -15,16 +15,18 @@ triggers:
   - "start here document"
 ---
 
-# Session Handoff v1.6 — Bucket-aware + reverse-lint + auto-merge docs PRs
+# Session Handoff v1.9 — Bucket-aware + reverse-lint + skill-freshness + issue emission
 
 Comprehensive end-of-session knowledge capture with built-in cross-session
 consolidation. Ensures nothing is lost between sessions and produces a single
 source of truth when multiple handoffs accumulate.
 
-**v1.4 alignment with memory-hygiene v3.3**: session output is dispatched across
+**v1.9 alignment with memory-hygiene v3.3**: session output is dispatched across
 the canonical **7-bucket docs/ taxonomy** — not just `docs/handoffs/`. At the end of
-the workflow, invokes `doc-freshness-reverse-lint` against any memory files touched
-this session to surface stale normative guidance in project docs.
+the workflow, invokes `doc-freshness-reverse-lint` and a **skill-freshness audit**
+against any memory or SKILL.md files touched this session to surface stale normative
+guidance, and emits the future-to-do plan's follow-up items as **GitHub issues** so
+nothing relies on a future session re-reading the handoff to act on them.
 
 Counterpart skill: **memory-hygiene v3.3** cleans Claude's persistent memory +
 audits project `docs/` against the same taxonomy. Run memory-hygiene after

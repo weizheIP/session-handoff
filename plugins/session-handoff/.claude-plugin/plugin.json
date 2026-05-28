@@ -3,7 +3,7 @@
   "description": "End-of-session handoff with bucket-aware dispatch across the canonical 7-bucket docs/ taxonomy (aligned with memory-hygiene v3.3), doc-freshness reverse-lint + skill-freshness audit, and future-to-do emission as GitHub issues. Captures knowledge, routes artifacts to decisions/runbooks/analysis/references/reviews/handoffs/deliverables, updates memory, prepares next-session prompts, and catches stale normative guidance.",
   "version": "1.9.0",
   "author": {
-    "name": "Hui-Yan Wan"
+    "name": "Huiyan Wan"
   },
   "repository": "https://github.com/wan-huiyan/session-handoff",
   "license": "MIT",
