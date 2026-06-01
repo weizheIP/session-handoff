@@ -1,7 +1,7 @@
 ---
 name: session-handoff
 description: "End-of-session handoff that captures session knowledge, dispatches output across the canonical 7-bucket docs/ taxonomy (decisions/runbooks/analysis/references/reviews/handoffs/deliverables — aligned with memory-hygiene v3.3), triggers a doc-freshness reverse-lint + skill-freshness audit to catch stale normative guidance, emits the future-to-do plan's follow-up items as GitHub issues, updates memory, and prepares next-session prompts. Use when: (1) user says 'wrap up', 'hand over', 'create handoff', 'end of session', 'write handoff', 'session handoff'; (2) non-trivial work session (3+ tasks) is ending; (3) context window is approaching limits; (4) user says 'consolidate', 'what's the current state', 'start here document' after parallel sessions; (5) the session produced artifacts that belong in more than one docs/ bucket (ADR + analysis + runbook + review). Includes cross-session consolidation when 3+ handoffs accumulate and a mandatory reverse-lint verify step against any lessons.md / feedback_*.md touched this session."
-version: 1.9.0
+version: 1.9.1
 triggers:
   - "wrap up"
   - "session handoff"
@@ -366,6 +366,107 @@ skipped: gh unavailable" in the handoff doc — never block the handoff on it.
 
     Skip silently if no SKILL.md was touched. If the audit script is unavailable, log "skill_freshness_audit: not installed" and continue.
 
+24c. **Persist session usage metrics** — archive this session's cctime output as a structured
+    record under `~/.claude/usage-tracking/` for cross-session analytics (Karpathy-style usage tracking).
+
+    **Canonical generator is the cctime FORK, invoked BY ABSOLUTE PATH** (not the bare
+    `cctime` name — see the name-collision warning below):
+
+    ```bash
+    SID="${CLAUDE_CODE_SESSION_ID:?session id required}"
+    OUT="$HOME/.claude/usage-tracking/$(date -u +%Y-%m-%d)_${SID:0:8}_<project-short>"
+    CCTIME_FORK="$HOME/.claude/tools/cctime-fork/dist/index.js"
+
+    if [ -f "$CCTIME_FORK" ]; then
+      node "$CCTIME_FORK" --session "$SID" --json > "$OUT.json"   # canonical record
+      node "$CCTIME_FORK" --session "$SID"        > "$OUT.md"     # human-readable companion
+    else
+      # Fork not present → in-skill recompute (same message.id dedup + recursive
+      # subagent accounting as the fork; AUTO-WRITES $OUT.{json,md} itself).
+      python3 ~/.claude/skills/session-handoff/scripts/session_metrics.py \
+        --session "$SID" --project=<slug-with-leading-dash> --print-summary
+    fi
+    ```
+
+    **CRITICAL — invoke the fork by PATH, never the bare `cctime`.** The fork's
+    `package.json` keeps the upstream package name `@dioptx/cctime`, so the global
+    `cctime` symlink is *ambiguous and unstable*: a `npm link` from the fork points it at
+    the fork, but any later `npm install -g @dioptx/cctime` (or a fresh machine) silently
+    clobbers it back to the **broken upstream**, and `cctime -V` reports `1.0.0` either way
+    so you can't tell them apart. Calling `node ~/.claude/tools/cctime-fork/dist/index.js`
+    sidesteps the symlink entirely and is deterministic. (This is the
+    `cctime-record-main-loop-inflated-by-stale-binary` failure mode — a stale-upstream
+    binary inflates main-loop cost ~1.8–2× via streaming-partial double-count, and the
+    wrong number is baked into the stored JSON.)
+
+    Why the fork at all: upstream (a) misattributes overnight-idle gaps to "Claude
+    thinking" (background-agent completion events during sleep classified as assistant
+    work), and (b) under-counts subagent tokens. Both are fixed in
+    [`wan-huiyan/cctime`](https://github.com/wan-huiyan/cctime) (PRs to upstream pending).
+
+    **One-time fork setup** (only if `~/.claude/tools/cctime-fork/dist/index.js` is absent):
+    ```bash
+    git clone --depth 1 https://github.com/wan-huiyan/cctime ~/.claude/tools/cctime-fork
+    cd ~/.claude/tools/cctime-fork && npm install && npm run build
+    # No `npm link` needed — the skill calls dist/index.js by path.
+    ```
+
+    Sanity check: on a session with an overnight gap, the fork reports "Xh away" as a
+    separate top-line beside "active"; upstream merges it into "Claude thinking" at ~98%.
+
+    **Fallback (`session_metrics.py`)** — if cctime isn't installed or the fork isn't available,
+    use the in-skill Python recompute:
+
+    ```bash
+    python3 ~/.claude/skills/session-handoff/scripts/session_metrics.py \
+      --session "$SID" --project=<slug-with-leading-dash> --print-summary
+    ```
+
+    This script dedupes tokens by `message.id`, sums main + subagent JSONLs, and classifies
+    gaps > 120s as idle — same logic the fork uses. Slower than cctime, but works without it.
+
+    **Subagent token/cost accounting (now correct in BOTH tools as of 2026-05-29).** Subagent spend
+    (foreground Agent dispatches AND Workflow fan-outs) used to be undercounted; both the cctime fork
+    and `session_metrics.py` were fixed this session and now agree (~$59 / 17 transcripts on the
+    reference session). Three traps the fixes address — relevant if you write your own recompute:
+    - **Nesting:** Workflow subagents live one level deeper than foreground ones —
+      `<session>/subagents/agent-*.jsonl` (foreground) vs
+      `<session>/subagents/workflows/wf_<runid>/agent-*.jsonl` (workflow). RECURSE; a flat
+      `glob("agent-*.jsonl")` misses the fleet (tens of % of true cost).
+    - **Per-message dedup must keep the HIGHEST-output chunk, not the first.** Streaming chunks share
+      a message.id/requestId; the first carries full input/cache but output_tokens≈0, so first-wins
+      under-counts OUTPUT ~8x.
+    - **Dedup each request ONCE across the whole file, not just consecutive chunks.** An
+      order-preserving dedup that flushes its group on every non-assistant row (the cctime parser's
+      `deduplicateAssistant`) re-counts a request key that recurs across tool-result boundaries,
+      inflating subagent input/cache ~50%. cctime's NEW subagent path uses a whole-file dedup
+      (`src/subagents.ts`) instead of routing subagent files through the parser. (The main-loop path
+      still uses the order-preserving parser — its over-count is a minor ~1-3% and is left alone
+      because phase/time analysis needs message order.)
+    See skill `claude-code-workflow-subagent-tokens-nested-undercount`.
+
+    **Heads-up — `session_metrics.py` AUTO-WRITES** `$OUT.{json,md}` to `~/.claude/usage-tracking/`
+    on every run (even with `--print-summary`), using the same filename convention as the cctime
+    step. Running it after the cctime step will CLOBBER the cctime `.json`/`.md`. Either let it own
+    both files (its `.json` is the complete, subagent-inclusive record), or pass `--output-dir` to a
+    scratch path and keep cctime's files canonical for the `.md`.
+
+    Writes a pair of files: `<date>_<8-char-session-id>_<project>.{json,md}`. The JSON is the
+    canonical record (schema versioned, accumulatable via `jq -s` across sessions); the Markdown
+    is a human-readable companion. See `~/.claude/usage-tracking/README.md` for schema, methodology,
+    and cross-session query patterns.
+
+    **Wire behavior:**
+    - If `~/.claude/usage-tracking/README.md` doesn't exist, the script doesn't create it — surface
+      to the user that they should set up the tracking folder once (the README in this skill's
+      own scripts/ folder is a copyable template).
+    - If neither cctime nor `session_metrics.py` is available, log "session metrics: not installed"
+      and continue.
+    - If both main and subagent JSONLs are missing for the session, skip silently — likely a
+      session that didn't go through the regular Claude Code transcript flow.
+    - On the FIRST run after a Claude Code update, sanity-check cctime against the Anthropic
+      billing dashboard — pricing constants may have moved.
+
 25. **Final confirmation** to user: list all artifacts produced, grouped by bucket
 
 ### Phase 5: Consolidate (when 3+ handoffs exist)
@@ -516,9 +617,16 @@ the session didn't touch — don't fabricate entries.
 | `memory/lessons.md` | N new (total: M) |
 | `memory/sessions_archive.md` | Updated — bucket footprint noted |
 | `MEMORY.md` index | Updated |
+| **Session usage record (step 24c)** | **REQUIRED — `~/.claude/usage-tracking/<date>_<sid8>_<project>.{json,md}` written (cost $X, N subagents) or explicit "skipped: <reason>"** |
 | Doc-freshness reverse-lint | Clean / N candidates surfaced in handoff doc |
 | PR | `#N` — merged / open for review |
 | Git status | All committed and pushed |
+
+> **The "Session usage record" row is NOT blankable** — it is the forcing function for step 24c,
+> which is otherwise easy to drop (it's a nested step late in Phase 4, after the PR merge, and the
+> Phase 6 recap reads as the "finale" — the classic `multi-agent-skill-silent-phase-compression`
+> tail-drop). You must either cite the written record path **or** state "skipped: <reason>". If you
+> reach this table and the cell is empty, go back and run step 24c before presenting.
 
 ## Anti-patterns
 
