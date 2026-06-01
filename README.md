@@ -164,16 +164,29 @@ Run the test suite (validates manifest/version consistency across `plugin.json`,
 npm test
 ```
 
-**Enable the pre-push guard (recommended, once per clone):**
+`main` is **branch-protected**: changes land via pull request only, and the
+`test-gate` status check must pass before merge (enforced for admins too — no direct
+pushes). Solo flow:
+
+```bash
+git checkout -b fix/something
+# …edit…
+git push -u origin fix/something          # hook runs npm test first (see below)
+gh pr create --fill
+gh pr merge --squash --delete-branch --auto   # merges once test-gate is green
+```
+
+**Enable the local pre-push guard (recommended, once per clone):**
 
 ```bash
 git config core.hooksPath .githooks
 ```
 
-This makes `git push` run `npm test` first and **abort the push if it fails** —
-catching a malformed version (e.g. a `.1.9.1` leading-dot semver typo) or a
-cross-file version drift *before* it reaches `main`, rather than after CI goes red.
-Override in a genuine emergency with `git push --no-verify`.
+This makes `git push` run `npm test` first and **abort the push if it fails** — so a
+malformed version (e.g. a `.1.9.1` leading-dot semver typo) or a cross-file version
+drift fails fast on your machine instead of after you've opened a PR. It's the fast
+local layer; branch protection is the authoritative server-side gate. Override the
+hook in a genuine emergency with `git push --no-verify` (the server gate still applies).
 
 ## Related Skills
 
