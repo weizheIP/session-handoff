@@ -23,3 +23,19 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+  # Stable aggregation gate for branch protection. Require THIS check (not the
+  # matrix-specific "test (20)" / "test (22)") so changing the Node matrix never
+  # silently orphans the required status check and blocks all merges.
+  test-gate:
+    if: always()
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify the test matrix succeeded
+        run: |
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "test matrix did not succeed: ${{ needs.test.result }}"
+            exit 1
+          fi
+          echo "all test matrix jobs passed"
