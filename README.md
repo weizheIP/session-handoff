@@ -162,6 +162,7 @@ The skill guarantees:
 
 ## Version History
 
+- **1.9.1** — Added a session usage-metrics step (step 24c): archives the session's `cctime` output as a structured record so handoffs carry token/cost accounting. Invokes the cctime fork by absolute path to avoid the upstream name-collision. Falls back gracefully if the fork isn't installed.
 - **1.9.0** — Skill-freshness audit step (runs when any SKILL.md edited this session) + future-to-do GitHub issue emission (each follow-up filed via `gh issue create`) + memory-hygiene v3.3 alignment in the lead.
 - **1.8.0** — Added the skill-freshness audit script wiring and tightened v3.3 references throughout the checklist.
 - **1.7.0** — Phase 6: user-facing live-dashboard recap delivered as chat output (not a file). Translates shipped PRs into per-venue "what you'll see next time" summaries.
