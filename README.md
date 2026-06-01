@@ -155,6 +155,26 @@ The skill guarantees:
 
 </details>
 
+## Development
+
+Run the test suite (validates manifest/version consistency across `plugin.json`,
+`marketplace.json`, `package.json`, and `SKILL.md` frontmatter):
+
+```bash
+npm test
+```
+
+**Enable the pre-push guard (recommended, once per clone):**
+
+```bash
+git config core.hooksPath .githooks
+```
+
+This makes `git push` run `npm test` first and **abort the push if it fails** —
+catching a malformed version (e.g. a `.1.9.1` leading-dot semver typo) or a
+cross-file version drift *before* it reaches `main`, rather than after CI goes red.
+Override in a genuine emergency with `git push --no-verify`.
+
 ## Related Skills
 
 - **[memory-hygiene](https://github.com/wan-huiyan/memory-hygiene)** v3.3+ — Source of truth for the 7-bucket `docs/` taxonomy. Deep memory cleanup + `docs/` taxonomy audit/migration beyond what session-handoff does in-line.

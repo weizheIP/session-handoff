@@ -287,6 +287,24 @@ describe("Manifest consistency", () => {
           "package.json must have a test script"
         );
       });
+
+      if (files.packageJson.version) {
+        it("has valid semver version", () => {
+          assert.match(
+            files.packageJson.version,
+            /^\d+\.\d+\.\d+$/,
+            "version must be semver (e.g., 1.2.3)"
+          );
+        });
+
+        it("version matches plugin.json version", () => {
+          assert.equal(
+            files.packageJson.version,
+            files.pluginJson.version,
+            "package.json version must match plugin.json version"
+          );
+        });
+      }
     });
   }
 
@@ -300,6 +318,17 @@ describe("Manifest consistency", () => {
       it("frontmatter name matches plugin.json", () => {
         const fm = extractFrontmatter(files.rootSkillMd);
         assert.equal(fm.name, SKILL_NAME);
+      });
+
+      it("frontmatter version matches plugin.json version", () => {
+        const fm = extractFrontmatter(files.rootSkillMd);
+        if (fm.version) {
+          assert.equal(
+            fm.version,
+            files.pluginJson.version,
+            "SKILL.md frontmatter version must match plugin.json version"
+          );
+        }
       });
 
       if (files.nestedSkillMd) {

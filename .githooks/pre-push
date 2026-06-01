@@ -1,0 +1,20 @@
+#!/bin/sh
+# Pre-push guard for session-handoff.
+# Runs the test suite before any push so a red/malformed change (e.g. the
+# ".1.9.1" leading-dot semver typo that once shipped to main with red CI)
+# is caught locally and the push is aborted BEFORE it reaches the remote.
+#
+# Install once per clone:
+#   git config core.hooksPath .githooks
+#
+# Override in a genuine emergency:
+#   git push --no-verify
+
+echo "pre-push: running test suite…"
+if ! npm test; then
+  echo ""
+  echo "✗ tests failed — push aborted. Fix the failures, or use 'git push --no-verify' to override."
+  exit 1
+fi
+echo "✓ tests passed — proceeding with push"
+exit 0
