@@ -83,9 +83,16 @@ prevents the "predecessor handoff fabricates semantic labels" failure mode
 **Run after Phase 1 Step 2 (handoff doc draft) and before any other phase.**
 
 ```bash
-python3 ~/.claude/skills/session-handoff/scripts/label_audit.py \
-  docs/handoffs/session_N_handoff.md
+# Resolve the bundled script — plugin install first, then git-clone install:
+LABEL_AUDIT="${CLAUDE_PLUGIN_ROOT:+${CLAUDE_PLUGIN_ROOT}/scripts/label_audit.py}"
+[ -f "$LABEL_AUDIT" ] || LABEL_AUDIT="$HOME/.claude/skills/session-handoff/scripts/label_audit.py"
+
+python3 "$LABEL_AUDIT" docs/handoffs/session_N_handoff.md
 ```
+
+If the script is not found at either location, log "label audit: not installed —
+labels unverified" in the handoff doc and continue — never block the handoff on
+missing tooling.
 
 **Behavior:**
 
@@ -358,13 +365,16 @@ skipped: gh unavailable" in the handoff doc — never block the handoff on it.
     ```bash
     # Only if a SKILL.md was touched this session
     if git diff --name-only HEAD~N..HEAD | grep -q 'skills/.*/SKILL\.md$'; then
-      python3 ~/.claude/skills/doc-freshness-reverse-lint/scripts/skill_freshness_audit.py --human
+      # Resolve the bundled script — plugin install first, then git-clone install:
+      SFA="${CLAUDE_PLUGIN_ROOT:+${CLAUDE_PLUGIN_ROOT}/scripts/skill_freshness_audit.py}"
+      [ -f "$SFA" ] || SFA="$HOME/.claude/skills/session-handoff/scripts/skill_freshness_audit.py"
+      python3 "$SFA" --human
     fi
     ```
 
     Flags any skill whose `last_verified` has aged past `staleness_window_days` (default 90), or that opts into the freshness contract without declaring one. **Never auto-bump** `last_verified` — surface candidates for human verification and add them to the "Stale docs to review" section of the handoff doc.
 
-    Skip silently if no SKILL.md was touched. If the audit script is unavailable, log "skill_freshness_audit: not installed" and continue.
+    Skip silently if no SKILL.md was touched. If the audit script is unavailable at both locations, log "skill_freshness_audit: not installed" and continue.
 
 24c. **Persist session usage metrics** — archive this session's cctime output as a structured
     record under `~/.claude/usage-tracking/` for cross-session analytics (Karpathy-style usage tracking).
@@ -382,9 +392,12 @@ skipped: gh unavailable" in the handoff doc — never block the handoff on it.
       node "$CCTIME_FORK" --session "$SID"        > "$OUT.md"     # human-readable companion
     else
       # Fork not present → in-skill recompute (same message.id dedup + recursive
-      # subagent accounting as the fork; AUTO-WRITES $OUT.{json,md} itself).
-      python3 ~/.claude/skills/session-handoff/scripts/session_metrics.py \
-        --session "$SID" --project=<slug-with-leading-dash> --print-summary
+      # subagent accounting as the fork; tokens only, no cost math).
+      # Resolve the bundled script — plugin install first, then git-clone install:
+      SM="${CLAUDE_PLUGIN_ROOT:+${CLAUDE_PLUGIN_ROOT}/scripts/session_metrics.py}"
+      [ -f "$SM" ] || SM="$HOME/.claude/skills/session-handoff/scripts/session_metrics.py"
+      python3 "$SM" --session "$SID" --project=<slug-with-leading-dash> --json > "$OUT.json"
+      python3 "$SM" --session "$SID" --project=<slug-with-leading-dash> --print-summary > "$OUT.md"
     fi
     ```
 
@@ -415,15 +428,19 @@ skipped: gh unavailable" in the handoff doc — never block the handoff on it.
     separate top-line beside "active"; upstream merges it into "Claude thinking" at ~98%.
 
     **Fallback (`session_metrics.py`)** — if cctime isn't installed or the fork isn't available,
-    use the in-skill Python recompute:
+    use the bundled Python recompute (resolve the path plugin-first, as above):
 
     ```bash
-    python3 ~/.claude/skills/session-handoff/scripts/session_metrics.py \
-      --session "$SID" --project=<slug-with-leading-dash> --print-summary
+    SM="${CLAUDE_PLUGIN_ROOT:+${CLAUDE_PLUGIN_ROOT}/scripts/session_metrics.py}"
+    [ -f "$SM" ] || SM="$HOME/.claude/skills/session-handoff/scripts/session_metrics.py"
+    python3 "$SM" --session "$SID" --project=<slug-with-leading-dash> --print-summary
     ```
 
-    This script dedupes tokens by `message.id`, sums main + subagent JSONLs, and classifies
-    gaps > 120s as idle — same logic the fork uses. Slower than cctime, but works without it.
+    This script dedupes tokens by `message.id` (whole-file, keeping the max-output chunk) and
+    sums main + recursively-discovered subagent JSONLs — the same accounting rules as the fork.
+    Tokens only: it does no time/idle-gap analysis and **no cost math** (pricing constants go
+    stale; cost estimation is delegated to the cctime fork / token-torch). Slower than cctime,
+    but works without it.
 
     **Subagent token/cost accounting (now correct in BOTH tools as of 2026-05-29).** Subagent spend
     (foreground Agent dispatches AND Workflow fan-outs) used to be undercounted; both the cctime fork
@@ -445,21 +462,20 @@ skipped: gh unavailable" in the handoff doc — never block the handoff on it.
       because phase/time analysis needs message order.)
     See skill `claude-code-workflow-subagent-tokens-nested-undercount`.
 
-    **Heads-up — `session_metrics.py` AUTO-WRITES** `$OUT.{json,md}` to `~/.claude/usage-tracking/`
-    on every run (even with `--print-summary`), using the same filename convention as the cctime
-    step. Running it after the cctime step will CLOBBER the cctime `.json`/`.md`. Either let it own
-    both files (its `.json` is the complete, subagent-inclusive record), or pass `--output-dir` to a
-    scratch path and keep cctime's files canonical for the `.md`.
+    **Heads-up — the bundled `session_metrics.py` prints to stdout only** and never writes files
+    on its own, so it cannot clobber the cctime outputs. To persist the record, redirect its
+    `--json` output to `$OUT.json` and its `--print-summary` output to `$OUT.md` as shown in the
+    step-24c snippet above. Its record is tokens-only (no `$` figures) — if you need cost in the
+    archived record, install the cctime fork.
 
-    Writes a pair of files: `<date>_<8-char-session-id>_<project>.{json,md}`. The JSON is the
+    The step writes a pair of files: `<date>_<8-char-session-id>_<project>.{json,md}`. The JSON is the
     canonical record (schema versioned, accumulatable via `jq -s` across sessions); the Markdown
     is a human-readable companion. See `~/.claude/usage-tracking/README.md` for schema, methodology,
     and cross-session query patterns.
 
     **Wire behavior:**
     - If `~/.claude/usage-tracking/README.md` doesn't exist, the script doesn't create it — surface
-      to the user that they should set up the tracking folder once (the README in this skill's
-      own scripts/ folder is a copyable template).
+      to the user that they should set up the tracking folder once.
     - If neither cctime nor `session_metrics.py` is available, log "session metrics: not installed"
       and continue.
     - If both main and subagent JSONLs are missing for the session, skip silently — likely a
