@@ -1,0 +1,5 @@
+{"type":"assistant","requestId":"req_1","message":{"id":"msg_1","role":"assistant","model":"claude-fable-5","usage":{"input_tokens":100,"output_tokens":1,"cache_read_input_tokens":50,"cache_creation_input_tokens":10}}}
+{"type":"user","message":{"role":"user","content":"tool result boundary between streaming chunks"}}
+{"type":"assistant","requestId":"req_1","message":{"id":"msg_1","role":"assistant","model":"claude-fable-5","usage":{"input_tokens":100,"output_tokens":80,"cache_read_input_tokens":50,"cache_creation_input_tokens":10}}}
+{"type":"assistant","requestId":"req_2","message":{"id":"msg_2","role":"assistant","model":"claude-fable-5","usage":{"input_tokens":20,"output_tokens":5,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}
+not-json garbage line that the parser must skip
