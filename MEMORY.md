@@ -1,0 +1,2 @@
+- [Lessons](memory/lessons.md) — Plugin layout discovery rule.
+- [Sessions archive](memory/sessions_archive.md) — Completed session handoffs.
