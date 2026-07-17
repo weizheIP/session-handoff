@@ -5,8 +5,8 @@ description: "Loads the latest complete session-handoff recovery context for the
 
 # Handload
 
-Load the latest complete session handoff as read-only recovery context. Use this after
-`/clear` to resume work in the same project without reconstructing the previous session.
+Load the latest complete session handoff as read-only recovery context in the same
+project without reconstructing the previous session.
 
 ## Boundaries
 

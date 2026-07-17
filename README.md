@@ -16,15 +16,14 @@ Claude: [same — triggers on natural language too]
 You: consolidate handoffs
 Claude: [merges 3+ handoff docs into a single source-of-truth plan]
 
-You: /clear
 You: /handload
 Claude: [loads the latest complete handoff summary and next-session prompt for this project]
 ```
 
-### Recovering after `/clear`
+### Recovering a session
 
-After `/session-handoff`, you can clear the conversation and run `/handload` in the
-same Git project. It reads the newest primary prompt with its preceding session
+After `/session-handoff`, run `/handload` in the same Git project whenever you need
+to restore its context. It reads the newest primary prompt with its preceding session
 summary in `docs/handoffs/`: `session_<P-1>_handoff.md` and
 `session_<P>_prompt.md`. Selection uses the largest primary-prompt number rather than
 file modification time, requires both files, and never falls back to an earlier prompt
@@ -176,7 +175,7 @@ The plugin ships a SessionStart hook script, `plugins/session-handoff/scripts/se
 }
 ```
 
-The command above assumes the git-clone install path. For a plugin (marketplace) install, point the command at the script inside the installed plugin directory instead — or simply copy `sessionstart_handoff_context.py` somewhere stable and reference that path. The `startup|resume` matcher fires on new and resumed sessions but not on `/clear`; add `|clear` if you want the pointer after clears too.
+The command above assumes the git-clone install path. For a plugin (marketplace) install, point the command at the script inside the installed plugin directory instead — or simply copy `sessionstart_handoff_context.py` somewhere stable and reference that path.
 
 <details>
 <summary>Quality Checklist</summary>

@@ -40,10 +40,10 @@ audits project `docs/` against the same taxonomy. Run memory-hygiene after
 - After parallel sessions complete and you need one "start here" document
 - User says "consolidate", "what's the current state"
 
-## Recover after `/clear`
+## Recover a session
 
-This plugin also ships `/session-handoff:handload` for explicit, read-only recovery
-after a `/clear`. In the same Git project, it loads the newest primary prompt
+This plugin also ships `/session-handoff:handload` for explicit, read-only recovery.
+In the same Git project, it loads the newest primary prompt
 `docs/handoffs/session_<P>_prompt.md` with its preceding session summary
 `docs/handoffs/session_<P-1>_handoff.md`. This matches the handoff output convention:
 step 2 writes `session_N_handoff.md` and step 17 writes `session_N+1_prompt.md`. It
