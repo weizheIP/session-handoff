@@ -36,27 +36,34 @@ ships a matching standalone global `/handload` Skill for the shorter command.
 
 ## Installation
 
-**Claude Code (plugin install — recommended):**
+**Claude Code（插件安装，推荐）：**
+
+在任意设备上执行：
+
 ```bash
-# Add the marketplace, then install the plugin
-claude plugin marketplace add wan-huiyan/session-handoff
-claude plugin install session-handoff@wan-huiyan-session-handoff
+claude plugin marketplace add weizheIP/session-handoff
+claude plugin install session-handoff@weizheIP-session-handoff
 ```
 
-**Claude Code (git clone):**
-```bash
-git clone https://github.com/wan-huiyan/session-handoff.git ~/.claude/skills/session-handoff
+重启 Claude Code 后可使用：
+
+```text
+/session-handoff
+/session-handoff:handload
 ```
 
-**Cursor** (2.4+):
-```bash
-# Per-project rule (most reliable)
-mkdir -p .cursor/rules
-# Copy plugins/session-handoff/SKILL.md content into .cursor/rules/session-handoff.mdc with alwaysApply: true
+**可选：启用裸 `/handload`：**
 
-# Or via npx skills CLI
-npx skills add wan-huiyan/session-handoff --global
+插件命令是 `/session-handoff:handload`。若需要更短的裸命令 `/handload`，在每台设备额外安装全局 Skill：
+
+```bash
+git clone https://github.com/weizheIP/session-handoff.git /tmp/session-handoff
+install -Dm644 /tmp/session-handoff/plugins/session-handoff/skills/handload/SKILL.md \
+  ~/.claude/skills/handload/SKILL.md
+rm -rf /tmp/session-handoff
 ```
+
+重启 Claude Code 后即可使用 `/handload`。该命令仅读取当前 Git 项目中的 `docs/handoffs/`，不会修改任何交接文件。
 
 ## What You Get
 
@@ -144,38 +151,11 @@ Handoff docs are written for *Claude in a future session* — dense, technical, 
 
 ## Limitations
 
-- Context usage is visible in Claude Code (`/context`, the statusline's context indicator) — but this skill does not auto-fire on a context threshold. End-of-session capture is manually triggered by design: you decide when the session is "done". The opt-in SessionStart hook below closes the other half of the loop by auto-surfacing the previous session's handoff prompt at startup, and Claude Code's PreCompact/SessionEnd hooks are available if you want to build tighter automation yourself.
+- Context usage is visible in Claude Code (`/context`, the statusline's context indicator), but the plugin never triggers automatically. Invoke `/session-handoff` when the session is ready to close, then explicitly invoke `/session-handoff:handload` or `/handload` when recovery is needed.
 - Assumes `docs/` and `memory/` directory structure — creates them if missing, but works best when pre-existing
 - Git-dependent for commit scanning and branch status (gracefully degrades without git)
 - Requires `gh` CLI for PR status validation during consolidation and for future-to-do issue emission (skips those checks without it)
-- Does not auto-trigger at session end — must be invoked explicitly
-- Helper scripts (`label_audit.py`, `session_metrics.py`, `skill_freshness_audit.py`, `sessionstart_handoff_context.py`) ship with the plugin in `plugins/session-handoff/scripts/`. The checklist resolves them from `${CLAUDE_PLUGIN_ROOT}/scripts/` (plugin install) first, then `~/.claude/skills/session-handoff/scripts/` (git-clone install); if a script is missing at both locations, that step logs and continues
-
-## Automating the loop with hooks (opt-in)
-
-The plugin ships a SessionStart hook script, `plugins/session-handoff/scripts/sessionstart_handoff_context.py`, that checks the project for the newest `docs/handoffs/session_*_prompt.md` and — if one exists — injects a short pointer into the new session's context so Claude reads the handoff prompt before starting work. If no prompt exists (or anything goes wrong), it emits nothing and exits 0, so it never blocks startup.
-
-**This hook is NOT registered automatically** — installing the plugin does not change your hook configuration. To opt in, add this to your `~/.claude/settings.json` (or the project's `.claude/settings.json`):
-
-```json
-{
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "startup|resume",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$HOME/.claude/skills/session-handoff/scripts/sessionstart_handoff_context.py\""
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-The command above assumes the git-clone install path. For a plugin (marketplace) install, point the command at the script inside the installed plugin directory instead — or simply copy `sessionstart_handoff_context.py` somewhere stable and reference that path.
+- Helper scripts (`label_audit.py`, `session_metrics.py`, `skill_freshness_audit.py`) ship with the plugin in `plugins/session-handoff/scripts/`. The checklist resolves them from `${CLAUDE_PLUGIN_ROOT}/scripts/` (plugin install) first, then `~/.claude/skills/session-handoff/scripts/` (git-clone install); if a script is missing at both locations, that step logs and continues
 
 <details>
 <summary>Quality Checklist</summary>
