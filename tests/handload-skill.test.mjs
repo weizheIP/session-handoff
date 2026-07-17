@@ -48,7 +48,9 @@ describe("handload skill", () => {
   it("documents explicit, read-only recovery of summary and prompt", () => {
     const skill = readFileSync(HANDLOAD, "utf-8");
     assert.match(skill, /^name: handload$/m);
-    assert.match(skill, /explicit `\/handload` request/);
+    const plugin = JSON.parse(readFileSync(resolve(ROOT, "plugins/session-handoff/.claude-plugin/plugin.json"), "utf-8"));
+    assert.match(skill, new RegExp(`^version: ${plugin.version.replaceAll(".", "\\.")}$`, "m"));
+    assert.match(skill, /explicit `\/session-handoff:handload` or `\/handload` request/);
     assert.match(skill, /session_<P-1>_handoff\.md/);
     assert.match(skill, /session_<P>_prompt\.md/);
     assert.match(skill, /Do not create, edit, move, delete, commit/);

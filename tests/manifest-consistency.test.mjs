@@ -78,52 +78,22 @@ if (existsSync(packageJsonPath)) {
   files.packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
 }
 
-// Discover the plugin's SKILL.md. In the canonical layout it lives at
-// plugins/<name>/SKILL.md (next to the plugin's .claude-plugin/plugin.json).
-// Fall back to a root SKILL.md for repos using the legacy flat layout.
-function findRootSkillMd() {
-  // Canonical: plugins/<name>/SKILL.md
-  const pluginsRoot = resolve(ROOT, "plugins");
-  if (existsSync(pluginsRoot)) {
-    for (const entry of readdirSync(pluginsRoot, { withFileTypes: true })) {
-      if (entry.isDirectory()) {
-        const candidate = resolve(pluginsRoot, entry.name, "SKILL.md");
-        if (existsSync(candidate)) return candidate;
-      }
-    }
-  }
-  // Legacy: SKILL.md at the repo root
-  const legacy = resolve(ROOT, "SKILL.md");
-  return existsSync(legacy) ? legacy : null;
-}
-
-const rootSkillMdPath = findRootSkillMd();
-if (rootSkillMdPath && existsSync(rootSkillMdPath)) {
-  files.rootSkillMd = readFileSync(rootSkillMdPath, "utf-8");
-}
-
-// Optional secondary SKILL.md: some plugins also expose a nested
-// plugins/<name>/skills/<skill>/SKILL.md. Skip if the layout doesn't use it.
-let nestedSkillMdPath = null;
+// Discover all nested skills. Multi-skill plugins use only the canonical
+// plugins/<plugin>/skills/<skill>/SKILL.md layout.
+files.nestedSkills = new Map();
 const pluginsRootForSkills = resolve(ROOT, "plugins");
 if (existsSync(pluginsRootForSkills)) {
   for (const pluginEntry of readdirSync(pluginsRootForSkills, { withFileTypes: true })) {
     if (!pluginEntry.isDirectory()) continue;
     const skillsDir = resolve(pluginsRootForSkills, pluginEntry.name, "skills");
     if (!existsSync(skillsDir)) continue;
-    try {
-      const subdirs = readdirSync(skillsDir, { withFileTypes: true })
-        .filter((d) => d.isDirectory());
-      for (const subdir of subdirs) {
-        const candidate = resolve(skillsDir, subdir.name, "SKILL.md");
-        if (existsSync(candidate)) {
-          nestedSkillMdPath = candidate;
-          files.nestedSkillMd = readFileSync(candidate, "utf-8");
-          break;
-        }
+    for (const subdir of readdirSync(skillsDir, { withFileTypes: true })) {
+      if (!subdir.isDirectory()) continue;
+      const candidate = resolve(skillsDir, subdir.name, "SKILL.md");
+      if (existsSync(candidate)) {
+        files.nestedSkills.set(subdir.name, readFileSync(candidate, "utf-8"));
       }
-    } catch { /* ignore */ }
-    if (nestedSkillMdPath) break;
+    }
   }
 }
 
@@ -308,35 +278,17 @@ describe("Manifest consistency", () => {
     });
   }
 
-  if (files.rootSkillMd) {
-    describe("SKILL.md", () => {
-      it("has YAML frontmatter with name", () => {
-        const fm = extractFrontmatter(files.rootSkillMd);
-        assert.ok(fm.name, "root SKILL.md must have a name in frontmatter");
-      });
-
-      it("frontmatter name matches plugin.json", () => {
-        const fm = extractFrontmatter(files.rootSkillMd);
-        assert.equal(fm.name, SKILL_NAME);
-      });
-
-      it("frontmatter version matches plugin.json version", () => {
-        const fm = extractFrontmatter(files.rootSkillMd);
-        if (fm.version) {
-          assert.equal(
-            fm.version,
-            files.pluginJson.version,
-            "SKILL.md frontmatter version must match plugin.json version"
-          );
-        }
-      });
-
-      if (files.nestedSkillMd) {
-        it("nested skills/ SKILL.md has a name", () => {
-          const nestedFm = extractFrontmatter(files.nestedSkillMd);
-          assert.ok(nestedFm.name, "nested SKILL.md must have a name in frontmatter");
-        });
-      }
+  describe("nested skills", () => {
+    it("ships handoff and handload skills", () => {
+      assert.deepEqual([...files.nestedSkills.keys()].sort(), ["handload", "handoff"]);
     });
-  }
+
+    for (const [directory, skill] of files.nestedSkills) {
+      it(`${directory} has matching frontmatter`, () => {
+        const fm = extractFrontmatter(skill);
+        assert.equal(fm.name, directory);
+        assert.equal(fm.version, files.pluginJson.version);
+      });
+    }
+  });
 });

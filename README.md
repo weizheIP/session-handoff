@@ -7,7 +7,7 @@ End-of-session handoff that captures all knowledge, **dispatches session output 
 ## Quick Start
 
 ```
-You: /session-handoff
+You: /session-handoff:handoff
 Claude: [scans git log, writes handoff doc, updates memory, creates next-session prompt]
 
 You: wrap up this session
@@ -22,7 +22,7 @@ Claude: [loads the latest complete handoff summary and next-session prompt for t
 
 ### Recovering a session
 
-After `/session-handoff`, run `/handload` in the same Git project whenever you need
+After `/session-handoff:handoff`, run `/handload` in the same Git project whenever you need
 to restore its context. It reads the newest primary prompt with its preceding session
 summary in `docs/handoffs/`: `session_<P-1>_handoff.md` and
 `session_<P>_prompt.md`. Selection uses the largest primary-prompt number rather than
@@ -48,7 +48,7 @@ claude plugin install session-handoff@weizheIP-session-handoff
 重启 Claude Code 后可使用：
 
 ```text
-/session-handoff
+/session-handoff:handoff
 /session-handoff:handload
 ```
 
@@ -151,7 +151,7 @@ Handoff docs are written for *Claude in a future session* — dense, technical, 
 
 ## Limitations
 
-- Context usage is visible in Claude Code (`/context`, the statusline's context indicator), but the plugin never triggers automatically. Invoke `/session-handoff` when the session is ready to close, then explicitly invoke `/session-handoff:handload` or `/handload` when recovery is needed.
+- Context usage is visible in Claude Code (`/context`, the statusline's context indicator), but the plugin never triggers automatically. Invoke `/session-handoff:handoff` when the session is ready to close, then explicitly invoke `/session-handoff:handload` or `/handload` when recovery is needed.
 - Assumes `docs/` and `memory/` directory structure — creates them if missing, but works best when pre-existing
 - Git-dependent for commit scanning and branch status (gracefully degrades without git)
 - Requires `gh` CLI for PR status validation during consolidation and for future-to-do issue emission (skips those checks without it)
@@ -218,6 +218,7 @@ hook in a genuine emergency with `git push --no-verify` (the server gate still a
 
 ## Version History
 
+- **1.9.2** — Moved the plugin skills to the canonical multi-skill layout. Use `/session-handoff:handoff` to create a handoff and `/session-handoff:handload` to recover it.
 - **1.9.1** — Added a session usage-metrics step (step 24c): archives the session's `cctime` output as a structured record so handoffs carry token/cost accounting. Invokes the cctime fork by absolute path to avoid the upstream name-collision. Falls back gracefully if the fork isn't installed.
 - **1.9.0** — Skill-freshness audit step (runs when any SKILL.md edited this session) + future-to-do GitHub issue emission (each follow-up filed via `gh issue create`) + memory-hygiene v3.3 alignment in the lead.
 - **1.8.0** — Added the skill-freshness audit script wiring and tightened v3.3 references throughout the checklist.

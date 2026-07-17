@@ -1,7 +1,7 @@
 ---
-name: session-handoff
+name: handoff
 description: "End-of-session handoff that captures session knowledge, dispatches output across the canonical 7-bucket docs/ taxonomy (decisions/runbooks/analysis/references/reviews/handoffs/deliverables — aligned with memory-hygiene v3.3), triggers a doc-freshness reverse-lint + skill-freshness audit to catch stale normative guidance, emits the future-to-do plan's follow-up items as GitHub issues, updates memory, and prepares next-session prompts. Use when: (1) user says 'wrap up', 'hand over', 'create handoff', 'end of session', 'write handoff', 'session handoff'; (2) non-trivial work session (3+ tasks) is ending; (3) context window is approaching limits; (4) user says 'consolidate', 'what's the current state', 'start here document' after parallel sessions; (5) the session produced artifacts that belong in more than one docs/ bucket (ADR + analysis + runbook + review). Includes cross-session consolidation when 3+ handoffs accumulate and a mandatory reverse-lint verify step against any lessons.md / feedback_*.md touched this session."
-version: 1.9.1
+version: 1.9.2
 triggers:
   - "wrap up"
   - "session handoff"
@@ -51,8 +51,6 @@ selects by the largest primary-prompt number, requires both files, and never fal
 back to an earlier prompt. It only lists same-prompt-session parallel prompts unless
 the user explicitly selects one.
 
-The optional SessionStart hook remains a pointer to a handoff prompt; `/handload`
-is the mechanism that loads the summary and prompt content into the active context.
 
 ## Canonical 7-bucket docs/ taxonomy (from memory-hygiene v3.3)
 
