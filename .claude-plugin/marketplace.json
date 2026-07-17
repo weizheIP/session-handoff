@@ -1,6 +1,6 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "wan-huiyan-session-handoff",
+  "name": "weizheIP-session-handoff",
   "description": "Single-plugin marketplace for session-handoff — End-of-session handoff with bucket-aware dispatch across the canonical 7-bucket docs/ taxonomy (aligned with memory-hygiene v3.3) and doc-freshness reverse-lint.",
   "owner": {
     "name": "wan-huiyan"
