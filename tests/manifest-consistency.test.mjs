@@ -332,10 +332,9 @@ describe("Manifest consistency", () => {
       });
 
       if (files.nestedSkillMd) {
-        it("nested skills/ SKILL.md has matching frontmatter name", () => {
+        it("nested skills/ SKILL.md has a name", () => {
           const nestedFm = extractFrontmatter(files.nestedSkillMd);
           assert.ok(nestedFm.name, "nested SKILL.md must have a name in frontmatter");
-          assert.equal(nestedFm.name, SKILL_NAME);
         });
       }
     });

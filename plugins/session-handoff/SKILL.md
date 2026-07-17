@@ -40,6 +40,20 @@ audits project `docs/` against the same taxonomy. Run memory-hygiene after
 - After parallel sessions complete and you need one "start here" document
 - User says "consolidate", "what's the current state"
 
+## Recover after `/clear`
+
+This plugin also ships `/session-handoff:handload` for explicit, read-only recovery
+after a `/clear`. In the same Git project, it loads the newest primary prompt
+`docs/handoffs/session_<P>_prompt.md` with its preceding session summary
+`docs/handoffs/session_<P-1>_handoff.md`. This matches the handoff output convention:
+step 2 writes `session_N_handoff.md` and step 17 writes `session_N+1_prompt.md`. It
+selects by the largest primary-prompt number, requires both files, and never falls
+back to an earlier prompt. It only lists same-prompt-session parallel prompts unless
+the user explicitly selects one.
+
+The optional SessionStart hook remains a pointer to a handoff prompt; `/handload`
+is the mechanism that loads the summary and prompt content into the active context.
+
 ## Canonical 7-bucket docs/ taxonomy (from memory-hygiene v3.3)
 
 Session output is **dispatched** to the right bucket — not dumped into one handoff file.

@@ -15,7 +15,25 @@ Claude: [same — triggers on natural language too]
 
 You: consolidate handoffs
 Claude: [merges 3+ handoff docs into a single source-of-truth plan]
+
+You: /clear
+You: /handload
+Claude: [loads the latest complete handoff summary and next-session prompt for this project]
 ```
+
+### Recovering after `/clear`
+
+After `/session-handoff`, you can clear the conversation and run `/handload` in the
+same Git project. It reads the newest primary prompt with its preceding session
+summary in `docs/handoffs/`: `session_<P-1>_handoff.md` and
+`session_<P>_prompt.md`. Selection uses the largest primary-prompt number rather than
+file modification time, requires both files, and never falls back to an earlier prompt
+if the newest pair is incomplete. Same-prompt-session parallel prompts are listed but
+not loaded unless explicitly selected. `/handload` is read-only and project-scoped, so
+separate projects keep separate recovery context.
+
+The bundled plugin exposes this as `/session-handoff:handload`. This repository also
+ships a matching standalone global `/handload` Skill for the shorter command.
 
 ## Installation
 
